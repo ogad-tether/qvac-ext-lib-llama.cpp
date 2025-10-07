@@ -195,9 +195,32 @@ struct clip_logger_state {
     ggml_log_level verbosity_thold;
     ggml_log_callback log_callback;
     void * log_callback_user_data;
+    // Store the llama callback to forward logs to
+    ggml_log_callback llama_callback;
+    void * llama_callback_user_data;
 };
 
 extern struct clip_logger_state g_logger_state;
+
+// Callback that redirects to llama's logging system
+static void clip_log_callback_llama(enum ggml_log_level level, const char * text, void * user_data) {
+    (void) user_data;
+    // Forward to the stored llama callback if available
+    if (g_logger_state.llama_callback != nullptr) {
+        g_logger_state.llama_callback(level, text, g_logger_state.llama_callback_user_data);
+    } else {
+        // Fallback to default if no llama callback is set
+        clip_log_callback_default(level, text, user_data);
+    }
+}
+
+// Function to enable llama logging redirection
+// This should be called after llama_log_set has been called to set up llama's logging
+static inline void clip_log_use_llama_callback(ggml_log_callback llama_cb, void * llama_user_data) {
+    g_logger_state.llama_callback = llama_cb;
+    g_logger_state.llama_callback_user_data = llama_user_data;
+    g_logger_state.log_callback = clip_log_callback_llama;
+}
 
 static void clip_log_internal_v(enum ggml_log_level level, const char * format, va_list args) {
     if (format == NULL) {
